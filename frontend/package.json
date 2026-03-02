@@ -1,0 +1,24 @@
+{
+    "name": "tourism-warning-frontend",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "dev": "vite --host",
+        "build": "vite build",
+        "preview": "vite preview"
+    },
+    "dependencies": {
+        "vue": "^3.2.47",
+        "vue-router": "^4.1.6",
+        "pinia": "^2.0.36",
+        "axios": "^1.4.0",
+        "echarts": "^5.4.3",
+        "element-plus": "^2.3.14"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-vue": "^2.3.4",
+        "vite": "^2.9.16",
+        "unplugin-auto-import": "^0.11.4",
+        "unplugin-vue-components": "^0.22.4"
+    }
+}

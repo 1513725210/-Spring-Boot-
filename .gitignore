@@ -1,0 +1,72 @@
+# ------------------------------------------------------------
+# General OS / editor files
+# ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+
+# ------------------------------------------------------------
+# Backend (Java / Maven)
+# ------------------------------------------------------------
+# Maven build output
+/target/
+# Maven wrapper jar (keep if you use wrapper)
+!.mvn/wrapper/maven-wrapper.jar
+# Compiled class files
+*.class
+# Log files
+*.log
+# Temporary files
+*.tmp
+*.bak
+*.swp
+# IDE specific files
+*.iml
+*.project
+*.classpath
+*.settings/
+*.factorypath
+# Packaged archives
+*.jar
+*.war
+*.ear
+
+# ------------------------------------------------------------
+# Frontend (Node / Vite)
+# ------------------------------------------------------------
+# Dependencies
+node_modules/
+# Build output
+/dist/
+# Vite cache / temporary files
+/.vite
+/.cache
+/.temp
+# npm / yarn logs
+npm-debug.log*
+yarn-error.log*
+# Environment files (keep locally, not in repo)
+.env
+.env.*
+
+# ------------------------------------------------------------
+# Python (AI service)
+# ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.pyd
+env/
+venv/
+*.egg-info/
+build/
+# pip log files
+pip-log.txt
+
+# ------------------------------------------------------------
+# Miscellaneous
+# ------------------------------------------------------------
+# Ignore any other generated files you don't want in version control
+# End of .gitignore
