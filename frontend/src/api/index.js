@@ -69,8 +69,8 @@ export const warningApi = {
 export const predictApi = {
     // 获取 ARIMA 预测
     predict: (scenicId, steps = 12) => {
-        return api({ // Changed 'request' to 'api' to match the file's context
-            url: `/predict/arima/${scenicId}`,
+        return api({
+            url: `/predict/${scenicId}`,
             method: 'get',
             params: { steps }
         })

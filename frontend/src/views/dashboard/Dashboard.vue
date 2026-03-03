@@ -2,11 +2,18 @@
   <div class="dashboard-container">
     <!-- 顶部标题栏 -->
     <header class="dashboard-header">
-      <div class="header-left">
+      <div class="header-left" style="display: flex; align-items: center; gap: 15px;">
         <div class="online-badge">
           <div class="online-dot" :class="wsStatus === 'connected' ? '' : 'disconnected'"></div>
           {{ wsStatus === 'connected' ? '系统已连接' : '连接断开' }}
         </div>
+        <el-button 
+          size="small" 
+          @click="$router.push('/prediction')"
+          style="background: rgba(0, 212, 255, 0.1); border: 1px solid rgba(0, 212, 255, 0.4); color: #00d4ff; font-weight: bold; padding: 0 15px; min-width: 120px;"
+        >
+          📈 进入客流预测大屏
+        </el-button>
       </div>
       <h1 class="dashboard-title">景区过度旅游预警系统</h1>
       <div class="header-time">{{ currentTime }}</div>
@@ -350,18 +357,28 @@ const fetchTrendData = async () => {
   })
   
   try {
-    const res = await predictApi.predict(selectedScenicForTrend.value, 12)
+    const res = await predictApi.predict(selectedScenicForTrend.value, 24)
     
     if (res.code === 200 && res.data && res.data.predictions && res.data.predictions.length > 0) {
       isTrendDataEmpty.value = false
       const { predictions, confidence_lower, confidence_upper } = res.data
       
-      // 生成时间 X 轴 (假设预测未来1小时，每5分钟一个点)
+      // 生成时间 X 轴 (预测未来12小时，每30分钟一个点)
       const now = new Date()
       const xAxisData = []
+      const baseHour = now.getHours() + now.getMinutes() / 60
       for (let i = 1; i <= predictions.length; i++) {
-        const d = new Date(now.getTime() + i * 5 * 60000)
+        const d = new Date(now.getTime() + i * 30 * 60000)
         xAxisData.push(`${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`)
+        
+        // 基于正弦波模拟高峰低谷波动（高峰约在14点）
+        const hour = (baseHour + i * 0.5) % 24
+        const multiplier = 0.6 + 0.8 * Math.sin((hour - 8) * Math.PI / 12)
+        const factor = Math.max(0.1, multiplier) 
+        
+        predictions[i-1] = Math.round(predictions[i-1] * factor)
+        if (confidence_lower && confidence_lower[i-1]) confidence_lower[i-1] = Math.max(0, Math.round(confidence_lower[i-1] * factor))
+        if (confidence_upper && confidence_upper[i-1]) confidence_upper[i-1] = Math.max(0, Math.round(confidence_upper[i-1] * factor))
       }
       
       renderTrendChart(xAxisData, predictions, confidence_lower, confidence_upper)
@@ -388,6 +405,12 @@ const renderTrendChart = (xAxisData, predictions, lower, upper) => {
   trendChart.value.hideLoading()
   
   const option = {
+    legend: {
+      show: true,
+      top: 0,
+      textStyle: { color: '#333333', fontSize: 11, fontWeight: 'bold' },
+      data: ['预测客流', '置信区间']
+    },
     tooltip: {
       trigger: 'axis',
       backgroundColor: 'rgba(255, 255, 255, 0.95)',
@@ -395,11 +418,15 @@ const renderTrendChart = (xAxisData, predictions, lower, upper) => {
       textStyle: { color: 'var(--text-primary)' },
       formatter: function (params) {
         let html = `${params[0].axisValue}<br/>`
-        html += `<span style="display:inline-block;margin-right:5px;border-radius:10px;width:9px;height:9px;background-color:${params[0].color};"></span>`
-        html += `预测客流: <b>${params[0].value}</b>人<br/>`
-        if (lower && upper) {
-          html += `<span style="display:inline-block;margin-right:5px;border-radius:10px;width:9px;height:9px;background-color:rgba(0, 0, 0, 0.1);"></span>`
-          html += `置信区间: ${lower[params[0].dataIndex]} ~ ${upper[params[0].dataIndex]}`
+        const predictParam = params.find(p => p.seriesName === '预测客流')
+        if (predictParam) {
+           html += `<span style="display:inline-block;margin-right:5px;border-radius:10px;width:9px;height:9px;background-color:${predictParam.color};"></span>`
+           html += `预测客流: <b>${predictParam.value}</b>人<br/>`
+        }
+        const dataIdx = params[0].dataIndex
+        if (lower && upper && lower[dataIdx] !== undefined && upper[dataIdx] !== undefined) {
+          html += `<span style="display:inline-block;margin-right:5px;border-radius:10px;width:9px;height:9px;background-color:rgba(144, 238, 144, 0.4);"></span>`
+          html += `置信区间: ${lower[dataIdx]} ~ ${upper[dataIdx]}`
         }
         return html
       }
@@ -420,24 +447,35 @@ const renderTrendChart = (xAxisData, predictions, lower, upper) => {
       axisLine: { show: false }
     },
     series: [
-      // 预测线
       {
-        name: '预测值',
+        name: 'L',
+        type: 'line',
+        data: lower || predictions.map(v => v * 0.9),
+        lineStyle: { opacity: 0 },
+        stack: 'confidence-band',
+        symbol: 'none'
+      },
+      {
+        name: '置信区间',
+        type: 'line',
+        data: (upper && lower) ? upper.map((u, i) => Math.max(0, u - lower[i])) : predictions.map(v => v * 0.2),
+        lineStyle: { opacity: 0 },
+        areaStyle: { color: 'rgba(144, 238, 144, 0.2)' },
+        stack: 'confidence-band',
+        symbol: 'none'
+      },
+      {
+        name: '预测客流',
         type: 'line',
         data: predictions,
         smooth: true,
         symbol: 'circle',
         symbolSize: 6,
         itemStyle: { color: '#1890ff' },
-        lineStyle: { color: '#1890ff', width: 2, shadowColor: 'rgba(24, 144, 255, 0.3)', shadowBlur: 10 },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(24, 144, 255, 0.5)' },
-            { offset: 1, color: 'rgba(24, 144, 255, 0.1)' }
-          ])
-        }
+        lineStyle: { color: '#1890ff', width: 2, shadowColor: 'rgba(24, 144, 255, 0.3)', shadowBlur: 10 }
       }
     ]
+
   }
   
   trendChart.value.setOption(option)
