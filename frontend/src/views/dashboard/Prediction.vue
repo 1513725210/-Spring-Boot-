@@ -187,6 +187,7 @@ const renderTrendChart = (xAxisData, predictions, lower, upper) => {
         name: '置信区间', // This matches the legend
         type: 'line',
         data: (upper && lower) ? upper.map((u, i) => Math.max(0, u - lower[i])) : predictions.map(v => v * 0.2),
+        itemStyle: { color: '#90ee90' }, // Ensures legend has correct color
         lineStyle: { opacity: 0 },
         areaStyle: { color: 'rgba(144, 238, 144, 0.2)' },
         stack: 'confidence-band',

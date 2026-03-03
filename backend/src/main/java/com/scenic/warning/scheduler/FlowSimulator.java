@@ -69,14 +69,24 @@ public class FlowSimulator {
         List<Map<String, Object>> allData = new ArrayList<>();
 
         for (ScenicSpot spot : spots) {
+            // 校验最大承载量，防止除零异常
+            Integer maxCap = spot.getMaxCapacity();
+            if (maxCap == null || maxCap <= 0) {
+                log.warn("【数据异常】景区 '{}' (id={}) 的最大承载量为 {} ，已使用默认值 10000 进行计算",
+                        spot.getName(), spot.getId(), maxCap);
+                maxCap = 10000;
+                spot.setMaxCapacity(maxCap);
+            }
+
             // 计算模拟客流
             int simulatedCount = calculateSimulatedCount(spot, now);
 
             // 更新景区当前人数
             scenicSpotService.updateCurrentCount(spot.getId(), simulatedCount);
 
-            // 计算拥挤度
-            double congestionRate = (double) simulatedCount / spot.getMaxCapacity() * 100;
+            // 计算拥挤度（保留两位小数）
+            double congestionRate = BigDecimal.valueOf((double) simulatedCount / maxCap * 100)
+                    .setScale(2, RoundingMode.HALF_UP).doubleValue();
 
             // 写入客流记录
             FlowRecord record = new FlowRecord();
@@ -108,6 +118,9 @@ public class FlowSimulator {
         wsMessage.put("type", "FLOW_UPDATE");
         wsMessage.put("data", allData);
         wsMessage.put("timestamp", now.toString());
+
+        String flowJson = com.alibaba.fastjson2.JSON.toJSONString(wsMessage);
+        log.info("【WebSocket推送-客流】即将广播 FLOW_UPDATE，数据条数={}，JSON={}", allData.size(), flowJson);
         WarningWebSocket.broadcastMessage(wsMessage);
 
         log.debug("客流模拟完成，更新了 {} 个景区的数据", spots.size());
@@ -226,6 +239,9 @@ public class FlowSimulator {
             warning.put("threshold", "RED".equals(warningLevel) ? redThreshold : yellowThreshold);
             warning.put("timestamp", LocalDateTime.now().toString());
 
+            String warningJson = com.alibaba.fastjson2.JSON.toJSONString(warning);
+            log.info("【WebSocket推送-预警】即将广播 WARNING，景区={}，级别={}，拥挤度={}%，JSON={}",
+                    spot.getName(), warningLevel, BigDecimal.valueOf(congestionRate).setScale(2, RoundingMode.HALF_UP), warningJson);
             WarningWebSocket.broadcastMessage(warning);
 
             log.warn("【{}预警】{} 当前客流{}人，拥挤度{:.1f}%",

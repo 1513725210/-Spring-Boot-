@@ -3,8 +3,8 @@
     <!-- 顶部标题栏 -->
     <header class="dashboard-header">
       <div class="header-left" style="display: flex; align-items: center; gap: 15px;">
-        <div class="online-badge">
-          <div class="online-dot" :class="wsStatus === 'connected' ? '' : 'disconnected'"></div>
+        <div class="online-badge" :style="{ color: wsStatus === 'connected' ? '#52c41a' : '#ff4d4f' }">
+          <div class="online-dot" :style="{ background: wsStatus === 'connected' ? '#52c41a' : '#ff4d4f', boxShadow: wsStatus === 'connected' ? '0 0 8px #52c41a' : '0 0 8px #ff4d4f' }"></div>
           {{ wsStatus === 'connected' ? '系统已连接' : '连接断开' }}
         </div>
         <el-button 
@@ -103,12 +103,12 @@
               <div class="ranking-name">{{ item.name }}</div>
               <div class="ranking-bar">
                 <div class="ranking-bar-inner" :style="{
-                   width: Math.min(item.congestionRate, 100) + '%',
+                   width: (isNaN(Number(item.congestionRate)) ? 0 : Math.min(item.congestionRate, 100)) + '%',
                    background: getCongestionColor(item.congestionRate)
                  }"></div>
               </div>
               <div class="ranking-percent" :style="{ color: getCongestionColor(item.congestionRate) }">
-                {{ Number(item.congestionRate).toFixed(1) }}%
+                {{ formatCongestionRate(item.congestionRate) }}
               </div>
             </div>
           </div>
@@ -123,11 +123,11 @@
             <div v-if="warningLogs.length === 0" style="text-align: center; color: var(--text-muted); padding: 20px 0;">
               暂无预警信息
             </div>
-            <div v-for="log in warningLogs" :key="log.id || log.timestamp" class="warning-item" :class="'level-' + log.level">
-              <div class="warning-badge" :class="log.level">{{ log.level === 'RED' ? '红色' : '黄色' }}</div>
+            <div v-for="log in warningLogs" :key="log.id || log.timestamp" class="warning-item" :class="'level-' + (log.level || log.warningLevel)">
+              <div class="warning-badge" :class="log.level || log.warningLevel">{{ (log.level || log.warningLevel) === 'RED' ? '红色' : '黄色' }}</div>
               <div class="warning-content">
                 <div style="font-weight: 600; margin-bottom: 4px; color: var(--text-primary)">{{ log.scenicName || log.scenic_name }}</div>
-                <div>当前客流 {{ log.currentCount || log.current_count }} 人，拥挤度 <span :style="{color: log.level === 'RED' ? 'var(--warning-red)' : 'var(--warning-yellow)'}">{{ log.congestionRate || log.congestion_rate }}%</span></div>
+                <div>当前客流 {{ log.currentCount || log.current_count }} 人，拥挤度 <span :style="{color: (log.level || log.warningLevel) === 'RED' ? 'var(--warning-red)' : 'var(--warning-yellow)'}">{{ formatCongestionRate(log.congestionRate || log.congestion_rate) }}</span></div>
               </div>
               <div class="warning-time">{{ formatTimeOnly(log.warningTime || log.warning_time || log.timestamp) }}</div>
             </div>
@@ -303,6 +303,11 @@ const formatTimeOnly = (dateStr) => {
   }
 }
 
+const formatCongestionRate = (rate) => {
+  const num = Number(rate);
+  return (isNaN(num) || rate === null || rate === undefined) ? '计算中...' : num.toFixed(1) + '%';
+}
+
 const getCongestionColor = (rate) => {
   if (rate >= 80) return '#ff4d4f' // 红色
   if (rate >= 60) return '#faad14' // 橙色
@@ -336,7 +341,12 @@ const fetchDashboardData = async () => {
     }
     
     if (warningRes.code === 200) {
-      warningLogs.value = warningRes.data
+      // REST API 返回的字段是 warningLevel，统一映射为 level
+      warningLogs.value = (warningRes.data || []).map(log => ({
+        ...log,
+        level: log.level || log.warningLevel,
+        congestionRate: log.congestionRate ?? log.congestion_rate
+      }))
     }
   } catch (error) {
     console.error('获取大屏数据失败', error)
@@ -459,6 +469,7 @@ const renderTrendChart = (xAxisData, predictions, lower, upper) => {
         name: '置信区间',
         type: 'line',
         data: (upper && lower) ? upper.map((u, i) => Math.max(0, u - lower[i])) : predictions.map(v => v * 0.2),
+        itemStyle: { color: '#90ee90' }, // Sets explicitly the legend color
         lineStyle: { opacity: 0 },
         areaStyle: { color: 'rgba(144, 238, 144, 0.2)' },
         stack: 'confidence-band',
@@ -492,6 +503,50 @@ const getCountColor = (count) => {
 }
 
 /**
+ * 坐标去重微调 (De-cluttering)
+ * 当多个景区经纬度完全相同或极度接近时，加入微小偏移防止重叠
+ * 偏移范围 ±0.008 度（约 ±800 米），不会跑出省界
+ */
+const declutterCoordinates = (spots) => {
+  const coordMap = {} // key: "lng,lat" => count
+  
+  return spots.map(spot => {
+    const key = `${Number(spot.longitude).toFixed(3)},${Number(spot.latitude).toFixed(3)}`
+    coordMap[key] = (coordMap[key] || 0) + 1
+    
+    let lng = Number(spot.longitude)
+    let lat = Number(spot.latitude)
+    
+    // 如果该坐标已经被占用过，加一个小偏移
+    if (coordMap[key] > 1) {
+      const angle = (coordMap[key] - 1) * (2 * Math.PI / 6) // 均匀分布在圆周上
+      const offset = 0.008
+      lng += offset * Math.cos(angle)
+      lat += offset * Math.sin(angle)
+    }
+    
+    return { ...spot, longitude: lng, latitude: lat }
+  })
+}
+
+/**
+ * BD-09 坐标转 WGS84 坐标（百度地图 → 标准 GPS）
+ * 注意：当前数据库中的坐标已经是 WGS84 格式，无需转换。
+ * 如果后续使用百度地图拾取坐标，请先调用此函数转换后再入库。
+ */
+// const bd09ToWgs84 = (bdLng, bdLat) => {
+//   const PI = Math.PI
+//   const x_pi = PI * 3000.0 / 180.0
+//   const x = bdLng - 0.0065, y = bdLat - 0.006
+//   const z = Math.sqrt(x * x + y * y) - 0.00002 * Math.sin(y * x_pi)
+//   const theta = Math.atan2(y, x) - 0.000003 * Math.cos(x * x_pi)
+//   // GCJ-02
+//   const gcjLng = z * Math.cos(theta), gcjLat = z * Math.sin(theta)
+//   // GCJ-02 → WGS84 (简易近似)
+//   return { lng: gcjLng * 2 - bdLng + 0.0065, lat: gcjLat * 2 - bdLat + 0.006 }
+// }
+
+/**
  * 初始化地图
  */
 const initMapChart = () => {
@@ -502,24 +557,29 @@ const initMapChart = () => {
   const option = {
     tooltip: {
       trigger: 'item',
+      confine: true,
       backgroundColor: 'rgba(255, 255, 255, 0.95)',
-      borderColor: 'var(--border-color)',
-      textStyle: { color: 'var(--text-primary)' },
+      borderColor: '#e8e8e8',
+      textStyle: { color: '#333' },
+      triggerOn: 'mousemove',
       formatter: function(params) {
+        // 只为景区散点显示 Tooltip
         if (params.componentSubType === 'effectScatter' || params.componentSubType === 'scatter') {
           const data = params.data
+          if (!data) return ''
           return `
             <div style="padding: 4px;">
-              <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 4px; color: var(--primary-dark);">
-                ${data.name}
+              <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 4px; color: #1890ff;">
+                📍 ${data.name}
               </div>
-              <div>当前客流：<span style="color: var(--accent); font-weight: bold;">${data.currentCount}</span> 人</div>
+              <div>当前客流：<span style="color: #1890ff; font-weight: bold;">${data.currentCount}</span> 人</div>
               <div>最大承载：${data.maxCapacity} 人</div>
-              <div>拥挤度：<span style="color: ${getCongestionColor(data.congestionRate)}; font-weight: bold;">${data.congestionRate}%</span></div>
+              <div>拥挤度：<span style="color: ${getCongestionColor(data.congestionRate)}; font-weight: bold;">${formatCongestionRate(data.congestionRate)}</span></div>
             </div>
           `
         }
-        return params.name
+        // 地图行政区划不显示 tooltip
+        return ''
       }
     },
     geo: {
@@ -529,7 +589,7 @@ const initMapChart = () => {
       center: [112.2, 31],
       label: {
         show: true,
-        color: 'var(--text-secondary)',
+        color: '#999',
         fontSize: 10
       },
       itemStyle: {
@@ -540,11 +600,10 @@ const initMapChart = () => {
         shadowBlur: 10
       },
       emphasis: {
-        label: { show: true, color: '#1f1f1f' },
-        itemStyle: {
-          areaColor: '#bae0ff',
-          borderColor: '#1890ff'
-        }
+        disabled: true
+      },
+      tooltip: {
+        show: false
       }
     },
     series: [
@@ -552,27 +611,31 @@ const initMapChart = () => {
         name: '景区热力',
         type: 'effectScatter',
         coordinateSystem: 'geo',
+        geoIndex: 0,
         data: [],
+        animation: false,
         symbolSize: function (val) {
-          // 方案B: 缩小散点大小，减轻重叠 (尺寸 5-15)
           const rate = val[2]
-          return Math.max(5, Math.min(15, rate / 6))
+          return Math.max(8, Math.min(16, rate / 6))
         },
         showEffectOn: 'render',
         rippleEffect: {
           brushType: 'stroke',
-          scale: 2.5
+          scale: 3,
+          period: 4
         },
         itemStyle: {
           color: function(params) {
-            // 继续使用交通灯红黄绿来表示拥挤度危险等级
             return getCongestionColor(params.data.congestionRate)
           },
-          opacity: 0.9,
-          shadowBlur: 5,
-          shadowColor: 'rgba(0, 0, 0, 0.2)'
+          opacity: 0.85,
+          shadowBlur: 4,
+          shadowColor: 'rgba(0, 0, 0, 0.15)'
         },
-        zlevel: 1
+        // 开启 tooltip（覆盖 geo 的 tooltip: show: false）
+        tooltip: {
+          show: true
+        }
       }
     ]
   }
@@ -582,23 +645,26 @@ const initMapChart = () => {
 
 /**
  * 更新地图数据
+ * 使用 declutterCoordinates 对坐标进行去重微调，防止点位重叠
  */
 const updateMapData = () => {
   if (!mapChart.value || !overview.value.spots) return
   
-  const scatterData = overview.value.spots.map(spot => ({
+  // 对坐标进行去重微调
+  const adjustedSpots = declutterCoordinates(overview.value.spots)
+  
+  const scatterData = adjustedSpots.map(spot => ({
     name: spot.name,
-    value: [spot.longitude, spot.latitude, spot.congestionRate],
+    value: [spot.longitude, spot.latitude, spot.congestionRate || 0],
     id: spot.id,
-    currentCount: spot.currentCount,
-    maxCapacity: spot.maxCapacity,
-    congestionRate: spot.congestionRate,
+    currentCount: spot.currentCount || 0,
+    maxCapacity: spot.maxCapacity || 10000,
+    congestionRate: spot.congestionRate || 0,
     status: spot.status
   }))
   
-  mapChart.value.setOption({
-    series: [{ data: scatterData }]
-  })
+  // lazyUpdate: true 防止与用户交互（缩放/拖拽）产生冲突
+  mapChart.value.setOption({ series: [{ data: scatterData }] }, { lazyUpdate: true })
 }
 
 /**
@@ -622,23 +688,31 @@ const setupWebSocket = () => {
       
       const newSpots = message.data
       
-      // 更新地图数据
+      // 更新地图数据 (使用去重微调 + 正确的 value 格式)
       if (mapChart.value) {
-        const scatterData = newSpots.map(spot => {
-          totalCurrent += spot.currentCount
-          if (spot.congestionRate >= 80) warningCnt++
+        const adjustedSpots = declutterCoordinates(newSpots.map(s => ({
+          ...s,
+          name: s.scenicName,
+          longitude: s.longitude,
+          latitude: s.latitude
+        })))
+        
+        const scatterData = adjustedSpots.map(spot => {
+          totalCurrent += spot.currentCount || 0
+          const rate = spot.congestionRate || 0
+          if (rate >= 80) warningCnt++
           
           return {
-            name: spot.scenicName,
-            value: [spot.longitude, spot.latitude, spot.currentCount],
-            id: spot.scenicId,
-            currentCount: spot.currentCount,
-            maxCapacity: spot.maxCapacity,
-            congestionRate: spot.congestionRate
+            name: spot.scenicName || spot.name,
+            value: [spot.longitude, spot.latitude, rate], // val[2] 必须是拥挤度百分比，不是人数
+            id: spot.scenicId || spot.id,
+            currentCount: spot.currentCount || 0,
+            maxCapacity: spot.maxCapacity || 10000,
+            congestionRate: rate
           }
         })
         
-        mapChart.value.setOption({ series: [{ data: scatterData }] })
+        mapChart.value.setOption({ series: [{ data: scatterData }] }, { lazyUpdate: true })
       }
       
       // 更新总览统计
@@ -660,7 +734,14 @@ const setupWebSocket = () => {
   
   // 处理主动预警推送
   wsClient.on('WARNING', (message) => {
-    const log = message
+    // WebSocket 推送的字段是 level，也做一次归一化
+    const log = {
+      ...message,
+      level: message.level || message.warningLevel,
+      congestionRate: message.congestionRate ?? message.congestion_rate
+    }
+    
+    console.log('[WS WARNING] 接收到预警推送:', JSON.stringify(log))
     
     // 添加到日志列表头部，保持最多20条
     warningLogs.value.unshift(log)
@@ -672,7 +753,7 @@ const setupWebSocket = () => {
     const alertId = Date.now().toString()
     
     // 如果是红色预警或存在生成的计划，使用返回的完整 message (可能包含 RAG HTML 计划)
-    let displayMsg = log.message || `当前拥挤度达到 <strong style="color: ${log.level === 'RED' ? 'var(--warning-red)' : 'var(--warning-yellow)'}">${log.congestionRate}%</strong>，请安排疏导。`;
+    let displayMsg = log.message || `当前拥挤度达到 <strong style="color: ${log.level === 'RED' ? 'var(--warning-red)' : 'var(--warning-yellow)'}">${formatCongestionRate(log.congestionRate)}</strong>，请安排疏导。`;
     if (log.plan) {
       displayMsg += `<div style="margin-top: 8px; border-top: 1px dashed rgba(0,0,0,0.1); padding-top: 8px;"><strong>⚡ AI 应急预案建议：</strong><br/>${log.plan}</div>`;
     }
