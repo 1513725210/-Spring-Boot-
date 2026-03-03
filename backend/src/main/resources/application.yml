@@ -51,10 +51,4 @@ logging:
   level:
     com.scenic.warning: debug
 
-# AI 大模型配置 (DeepSeek)
-ai:
-  deepseek:
-    api-key: sk-621fe659f0f94ab5893e96f537822cc7
-    base-url: https://api.deepseek.com/chat/completions
-    model: deepseek-chat
 

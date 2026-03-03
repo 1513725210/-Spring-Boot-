@@ -2,7 +2,6 @@ package com.scenic.warning.task;
 
 import com.scenic.warning.entity.ScenicSpot;
 import com.scenic.warning.service.ScenicSpotService;
-import com.scenic.warning.service.ScenicSpotService;
 import com.scenic.warning.service.WarningLogService;
 import com.scenic.warning.websocket.WarningWebSocket;
 import lombok.extern.slf4j.Slf4j;

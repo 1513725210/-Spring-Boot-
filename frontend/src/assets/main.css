@@ -594,118 +594,153 @@ body,
   font-size: 13px;
   margin-bottom: 32px;
 }/* AI 数据管家聊天窗 */
+
 .ai-chat-widget {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 320px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(20px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  z-index: 1000;
-  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: fixed;
+    width: 380px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(20px);
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    transition: box-shadow 0.3s;
+}
+
+.ai-chat-widget.is-open {
+    resize: both;
+    overflow: hidden;
+    height: 520px;
+    min-width: 280px;
+    min-height: 280px;
+    max-width: 90vw;
+    max-height: 90vh;
+}
+
+.ai-chat-widget:not(.is-open) {
+    resize: none;
+    width: 320px !important;
+    height: auto !important;
+    overflow: hidden;
 }
 
 .chat-header {
-  padding: 12px 16px;
-  background: linear-gradient(135deg, var(--bg-card), var(--bg-dark));
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  user-select: none;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, var(--bg-card), var(--bg-dark));
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: grab;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.chat-header:active {
+    cursor: grabbing;
 }
 
 .chat-icon {
-  font-size: 20px;
+    font-size: 20px;
 }
 
 .chat-title {
-  flex: 1;
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text-primary);
+    flex: 1;
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-primary);
 }
 
 .toggle-icon {
-  color: var(--text-muted);
+    color: var(--text-muted);
 }
 
 .chat-body {
-  height: 400px;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-deepest);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-deepest);
+    min-height: 0;
 }
 
 .chat-messages {
-  flex: 1;
-  padding: 16px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .chat-bubble {
-  max-width: 85%;
-  padding: 10px 14px;
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.5;
-  word-break: break-word;
+    max-width: 95%;
+    padding: 10px 14px;
+    border-radius: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+    word-break: break-word;
 }
 
 .chat-bubble.ai {
-  align-self: flex-start;
-  background: rgba(45, 90, 240, 0.08); /* 适配亮色主题 */
-  border: 1px solid rgba(45, 90, 240, 0.1);
-  color: var(--text-primary);
-  border-bottom-left-radius: 4px;
+    align-self: flex-start;
+    background: rgba(45, 90, 240, 0.08);
+    border: 1px solid rgba(45, 90, 240, 0.1);
+    color: var(--text-primary);
+    border-bottom-left-radius: 4px;
 }
 
 .chat-bubble.user {
-  align-self: flex-end;
-  background: var(--primary);
-  color: white;
-  border-bottom-right-radius: 4px;
-  box-shadow: 0 4px 12px var(--primary-glow);
+    align-self: flex-end;
+    background: var(--primary);
+    color: white;
+    border-bottom-right-radius: 4px;
+    box-shadow: 0 4px 12px var(--primary-glow);
 }
 
 .chat-input-area {
-  padding: 12px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-card);
+    padding: 12px;
+    border-top: 1px solid var(--border-color);
+    background: var(--bg-card);
+    flex-shrink: 0;
 }
 
-/* AI 打字机动画 */
+/* AI typing animation */
 .chat-bubble.typing {
-  padding: 8px 14px;
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  height: 38px;
+    padding: 8px 14px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    height: 38px;
 }
 
 .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--primary);
-  opacity: 0.6;
-  animation: bounce 1.4s infinite ease-in-out both;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+    opacity: 0.6;
+    animation: bounce 1.4s infinite ease-in-out both;
 }
 
-.dot:nth-child(1) { animation-delay: -0.32s; }
-.dot:nth-child(2) { animation-delay: -0.16s; }
+.dot:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.dot:nth-child(2) {
+    animation-delay: -0.16s;
+}
 
 @keyframes bounce {
-  0%, 80%, 100% { transform: scale(0); }
-  40% { transform: scale(1); }
+
+    0%,
+    80%,
+    100% {
+        transform: scale(0);
+    }
+
+    40% {
+        transform: scale(1);
+    }
 }
